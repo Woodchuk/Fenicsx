@@ -1,5 +1,4 @@
-#This model is used to synthesize a dual polarization
-#circular suspended patch antenna for use at 915 MHz
+#This model is used to verify monopole antenna radiation pattern
 
 import sys
 import numpy as np
@@ -25,46 +24,7 @@ class Hinc:
         hy = self.H * (x[0] - self.x0) / (2.0 * np.pi * ((x[0] - self.x0)**2 + (x[1] - self.y0)**2))
         hz = np.full_like(hy, 0.0+0.0j, dtype=np.complex128)
         return(hx, hy, hz)
-        
-class rp:
-    def __init__(self, k0, ar):
-        self.k0 = k0
-        self.ar = ar
-    def pp1(self, x):
-        phsfac = np.exp(-1j * self.k0 * (self.ar[0] * x[0] + self.ar[1] * x[1] + self.ar[2] * x[2]))
-        return phsfac
-        
-    def pp2(self, x):
-        phsfac = np.exp(-1j * self.k0 * (-self.ar[0] * x[0] + self.ar[1] * x[1] + self.ar[2] * x[2]))
-        return phsfac
-        
-    def pp3(self, x):
-        phsfac = np.exp(-1j * self.k0 * (self.ar[0] * x[0] + self.ar[1] * x[1] - self.ar[2] * x[2]))
-        return phsfac
-        
-    def pp4(self, x):
-        phsfac = np.exp(-1j * self.k0 * (-self.ar[0] * x[0] + self.ar[1] * x[1] - self.ar[2] * x[2]))
-        return phsfac
-        
-class ObsVec:
-    def __init__(self, theta, phi):
-        self.theta = theta
-        self.phi = phi
-    def rr(self, x):
-        ax = np.sin(self.theta)*np.cos(self.phi) + x[0] * 0.0
-        ay = np.sin(self.theta)*np.sin(self.phi) + x[1] * 0.0
-        az = np.cos(self.theta) + x[2] * 0.0
-        return(ax, ay, az)
-    def rtheta(self, x):
-        ax = np.cos(self.theta)*np.cos(self.phi) + x[0] * 0.0
-        ay = np.cos(self.theta)*np.sin(self.phi) + x[1] * 0.0
-        az = -np.sin(self.theta) + x[2] * 0.0
-        return(ax, ay, az)
-    def rphi(self, x):
-        ax = -np.sin(self.phi) + x[0] * 0.0
-        ay = np.cos(self.phi) + x[1] * 0.0
-        az = 0.0 * x[2]
-        return(ax, ay, az)
+    
 
 comm = nMPI.COMM_WORLD
 mpiRank = comm.rank
@@ -83,8 +43,6 @@ def Model(x):
     eta0 = 377.0
     eps = 1.0e-4 # Geom tolerance
 
-#    k0 = x[2] # free space wave number
-#    k0 = 0.225 * 2.0 * np.pi / h
     k0 = 0.225 * 2.0 * np.pi / h
     lm = 0.8 # background mesh density
     le = 0.15 # edge mesh density
@@ -239,7 +197,7 @@ def Model(x):
     Prad = mesh.comm.allreduce(fem.assemble_scalar(fem.form(ufl.inner(E, ufl.cross(ufl.curl(E), n)) * ds(3))) / (2.0j * k0 * eta0), op=nMPI.SUM)
     Pinc = mesh.comm.allreduce(fem.assemble_scalar(fem.form(ufl.inner(uh, uh) * ds(4))) * eta0 / 2.0 , op=nMPI.SUM)
     Pref = mesh.comm.allreduce(fem.assemble_scalar(fem.form(ufl.inner(E, ufl.cross(ufl.curl(E), n)) * ds(4))) / (-2.0j * k0 * eta0), op=nMPI.SUM)
-    Esquared = mesh.comm.allreduce(fem.assemble_scalar(fem.form(ufl.inner(ufl.cross(E, n), ufl.cross(E, n)) * ds(3))), op=nMPI.SUM)
+
 # Generate reflection coefficient at feed
     Rx = mesh.comm.allreduce(fem.assemble_scalar(fem.form(ufl.inner(E - eta0 * ufl.cross(n, uh), ufl.cross(n, uh)) * ds(4))), op=nMPI.SUM)
     Dx = mesh.comm.allreduce(fem.assemble_scalar(fem.form(ufl.inner(uh, uh) * ds(4))), op=nMPI.SUM) * eta0 
@@ -249,7 +207,7 @@ def Model(x):
     Rho = Rx * np.exp(2j*k0*lc)/ Dx
     Zin = 50.0 * (1.0 + Rho) / (1.0 - Rho)
     if mpiRank == 0:
-        print("Pinc = {0}, Pref = {1}, Prad = {2}, Esquared = {3}".format(Pinc, np.real(Pinc-Pref), np.real(Prad), Esquared))
+        print("Pinc = {0}, Pref = {1}, Prad = {2}".format(Pinc, np.real(Pinc-Pref), np.real(Prad)))
         print("k0 = {0}, Symm = {1}".format(k0, SymmType))
         print("Gamma at feed = {0}, Gamma at coax input = {1}".format(Rx * np.exp(2j*k0*lc)/ Dx, Rx / Dx))
         print("Zin at feed = {0}, Zin at coax input = {1}".format(Zin, 50.0 * (1 + Rx/Dx)/(1 - Rx/Dx)))
@@ -278,7 +236,7 @@ def Model(x):
 
     fp = open("Pattern1.txt", "w")
 #Loop over theta-phi angles
-    for p in range(26):
+    for p in range(-26, 26, 1):
         theta = np.pi * p / 50
         for q in range(1):
            phi = np.pi * q / 50
